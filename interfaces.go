@@ -51,6 +51,7 @@ type Subscription interface {
 // should be preferred over full blocks whenever possible.
 //
 // The returned error is NotFound if the requested item does not exist.
+// 区块链信息：区块、区块头、区块交易、订阅新区块
 type ChainReader interface {
 	BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error)
 	BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error)
@@ -78,10 +79,12 @@ type TransactionReader interface {
 	// blockchain. The isPending return value indicates whether the transaction has been
 	// mined yet. Note that the transaction may not be part of the canonical chain even if
 	// it's not pending.
+	// 和ChainReader不一样在于：读取交易的更详细信息。如：isPending，而且明确知道交易hash
 	TransactionByHash(ctx context.Context, txHash common.Hash) (tx *types.Transaction, isPending bool, err error)
 	// TransactionReceipt returns the receipt of a mined transaction. Note that the
 	// transaction may not be included in the current canonical chain even if a receipt
 	// exists.
+	// 和ChainReader不一样在于：明确知道交易hash
 	TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error)
 }
 
@@ -97,6 +100,7 @@ type ChainStateReader interface {
 
 // SyncProgress gives progress indications when the node is synchronising with
 // the Ethereum network.
+// 当前节点同步状态
 type SyncProgress struct {
 	StartingBlock uint64 // Block number where sync began
 	CurrentBlock  uint64 // Current block number where sync is at
@@ -125,16 +129,17 @@ type CallMsg struct {
 // the EVM but not mined into the blockchain. ContractCall is a low-level method to
 // execute such calls. For applications which are structured around specific contracts,
 // the abigen tool provides a nicer, properly typed way to perform calls.
+// TODO "but not mined into the blockchain" ????? 这句话没有懂意思
 type ContractCaller interface {
 	CallContract(ctx context.Context, call CallMsg, blockNumber *big.Int) ([]byte, error)
 }
 
 // FilterQuery contains options for contract log filtering.
-type FilterQuery struct {
+type FilterQuery struct {      // BlockHash/FromBlock/ToBlock表示在哪些区块查找日志
 	BlockHash *common.Hash     // used by eth_getLogs, return logs only from block with this hash
 	FromBlock *big.Int         // beginning of the queried range, nil means genesis block
 	ToBlock   *big.Int         // end of the range, nil means latest block
-	Addresses []common.Address // restricts matches to events created by specific contracts
+	Addresses []common.Address // restricts matches to events created by specific contracts  哪些合约产生的日志
 
 	// The Topic list restricts matches to particular event topics. Each event has a list
 	// of topics. Topics matches a prefix of that list. An empty element slice matches any
@@ -147,6 +152,7 @@ type FilterQuery struct {
 	// {{}, {B}}          matches any topic in first position, B in second position
 	// {{A}, {B}}         matches topic A in first position, B in second position
 	// {{A, B}}, {C, D}}  matches topic (A OR B) in first position, (C OR D) in second position
+	// 筛选条件，格式上有点类似正则表达式（见上面Examples）。 筛选操作，将满足这些topics的日志筛选出来
 	Topics [][]common.Hash
 }
 
@@ -155,6 +161,7 @@ type FilterQuery struct {
 //
 // Logs received through a streaming query subscription may have Removed set to true,
 // indicating that the log was reverted due to a chain reorganisation.
+// ContractCaller是调用智能合约；LogFilter是查看智能合约运行日志。可以只查看一条，也可以一直查看日志（相当于linux的tail -f命令）
 type LogFilterer interface {
 	FilterLogs(ctx context.Context, q FilterQuery) ([]types.Log, error)
 	SubscribeFilterLogs(ctx context.Context, q FilterQuery, ch chan<- types.Log) (Subscription, error)
@@ -168,12 +175,14 @@ type LogFilterer interface {
 // The transaction must be signed and have a valid nonce to be included. Consumers of the
 // API can use package accounts to maintain local private keys and need can retrieve the
 // next available nonce using PendingNonceAt.
+// TODO 还需要进一步理解
 type TransactionSender interface {
 	SendTransaction(ctx context.Context, tx *types.Transaction) error
 }
 
 // GasPricer wraps the gas price oracle, which monitors the blockchain to determine the
 // optimal gas price given current fee market conditions.
+// 获取“气”价
 type GasPricer interface {
 	SuggestGasPrice(ctx context.Context) (*big.Int, error)
 }
@@ -206,6 +215,7 @@ type GasEstimator interface {
 
 // A PendingStateEventer provides access to real time notifications about changes to the
 // pending state.
+// TODO 难道Event不能被查询，只能订阅吗？
 type PendingStateEventer interface {
 	SubscribePendingTransactions(ctx context.Context, ch chan<- *types.Transaction) (Subscription, error)
 }
